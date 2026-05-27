@@ -1,3 +1,5 @@
+name: compliant-outreach-orchestrator
+
 services:
   api:
     build:
@@ -6,7 +8,7 @@ services:
       sbom: false
     command: uvicorn orchestrator.main:app --host 0.0.0.0 --port 8000 --reload
     env_file:
-      - .env.example
+      - .env
     environment:
       PYTHONPATH: /app/src
     ports:
@@ -26,7 +28,7 @@ services:
       sbom: false
     command: python -c "import time; print('worker placeholder ready', flush=True); time.sleep(31536000)"
     env_file:
-      - .env.example
+      - .env
     environment:
       PYTHONPATH: /app/src
     volumes:
@@ -40,15 +42,15 @@ services:
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_DB: domu_orchestrator
-      POSTGRES_USER: domu
-      POSTGRES_PASSWORD: domu
+      POSTGRES_DB: outreach_orchestrator
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: orchestrator
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U domu -d domu_orchestrator"]
+      test: ["CMD-SHELL", "pg_isready -U orchestrator -d outreach_orchestrator"]
       interval: 5s
       timeout: 5s
       retries: 10
