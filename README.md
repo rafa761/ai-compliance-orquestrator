@@ -1,23 +1,19 @@
 # Compliant Outreach Orchestrator
 
-A small FastAPI demo project inspired by Domu AI's regulated servicing and collections product surface.
+A small FastAPI demo project inspired by regulated servicing and collections product workflows.
 
 The service will accept customer/account events, apply deterministic compliance policy rules, schedule outbound call/SMS/email tasks, dispatch them through mock channel adapters, and preserve an auditable event log.
 
-This repository is intentionally backend-first. The goal is to demonstrate orchestration, compliance reasoning, idempotency, queue processing, PostgreSQL modeling, and operational clarity rather than a decorative UI.
+## Product narrative
 
-## Current phase
+This project demonstrates engineering concerns common to regulated servicing platforms: collections workflows, multi-channel communication, policy controls, auditability, and event-driven backend systems:
 
-Phase 0: project hygiene and runtime skeleton.
-
-Implemented so far:
-
-- FastAPI application package under `src/orchestrator`
-- Health endpoint: `GET /healthz`
-- pytest/httpx health check test
-- Dockerfile for the API image
-- Docker Compose services for API, worker placeholder, PostgreSQL, and Redis
-- `.env.example` for local configuration
+- deterministic compliance checks before outreach
+- explicit audit trail for decisions and actions
+- idempotent processing to avoid duplicate customer contact
+- PostgreSQL-backed operational state
+- queue-worker architecture for outbound tasks
+- mock provider adapters to isolate orchestration from vendor APIs
 
 ## Requirements
 
@@ -100,24 +96,7 @@ Inbound event
   -> append-only audit log
 ```
 
-## How this maps to Domu AI
-
-Domu's public materials emphasize regulated servicing, collections workflows, multi-channel communication, policy controls, auditability, and event-driven backend systems. This project is a small demonstration of those same engineering concerns:
-
-- deterministic compliance checks before outreach
-- explicit audit trail for decisions and actions
-- idempotent processing to avoid duplicate customer contact
-- PostgreSQL-backed operational state
-- queue-worker architecture for outbound tasks
-- mock provider adapters to isolate orchestration from vendor APIs
-
 ## Development principles
 
 - Keep policy decisions deterministic and testable.
 - Treat audit logs as product features, not debug leftovers.
-- Prefer boring, reliable backend code over impressive but fragile demos.
-- Add real provider integrations only after the orchestration core is correct.
-
-## Next phase
-
-Phase 1 will add database models and migrations for customers, accounts, inbound events, outreach tasks, policy decisions, and audit events.
