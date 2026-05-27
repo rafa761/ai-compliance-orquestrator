@@ -1,0 +1,67 @@
+services:
+  api:
+    build:
+      context: .
+      provenance: false
+      sbom: false
+    command: uvicorn orchestrator.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env.example
+    environment:
+      PYTHONPATH: /app/src
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      provenance: false
+      sbom: false
+    command: python -c "import time; print('worker placeholder ready', flush=True); time.sleep(31536000)"
+    env_file:
+      - .env.example
+    environment:
+      PYTHONPATH: /app/src
+    volumes:
+      - ./src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: domu_orchestrator
+      POSTGRES_USER: domu
+      POSTGRES_PASSWORD: domu
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U domu -d domu_orchestrator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
