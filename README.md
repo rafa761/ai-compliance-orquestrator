@@ -146,8 +146,6 @@ flowchart LR
 - Keep policy decisions deterministic and testable.
 - Treat audit logs as product features, not debug leftovers.
 - Keep idempotency internal and derived from stable source event identity.
-- Keep domain logic independent from HTTP handlers where possible.
-- Prefer small, interview-explainable implementation over production-grade ceremony.
 
 ## Design documentation
 
@@ -159,7 +157,7 @@ flowchart LR
 
 Additional visual asset:
 
-Event driven call processing
+Event-driven call processing
 
 ![Event driven call processing](docs/diagrams/event-driven-call-processing-2026-05-28.png)
 
