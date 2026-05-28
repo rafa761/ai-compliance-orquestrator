@@ -1,8 +1,7 @@
-.PHONY: help install run test lint format check docker-config docker-build docker-up docker-up-detached docker-down docker-clean docker-logs docker-ps health
+.PHONY: help install run test lint format check migrate downgrade revision docker-up docker-down docker-clean docker-logs docker-ps health
 
 .DEFAULT_GOAL := help
 
-APP_MODULE := orchestrator.main:app
 API_URL := http://localhost:8000
 
 help: ## Show available commands
@@ -12,7 +11,7 @@ install: ## Install project dependencies with uv
 	uv sync
 
 run: ## Run the FastAPI app locally without Docker
-	uv run uvicorn $(APP_MODULE) --host 0.0.0.0 --port 8000 --reload
+	uv run python -m orchestrator.main
 
 test: ## Run the test suite
 	uv run pytest -q
@@ -25,8 +24,17 @@ format: ## Format Python code with Ruff
 
 check: lint test ## Run the standard local verification checks
 
-docker-up: ## Start the full Docker Compose stack
-	docker compose up -d --build
+migrate: ## Apply database migrations
+	uv run alembic upgrade head
+
+downgrade: ## Roll back the latest database migration
+	uv run alembic downgrade -1
+
+revision: ## Create a new Alembic autogeneration revision; pass message with m="..."
+	uv run alembic revision --autogenerate -m "$(m)"
+
+docker-up: ## Start the full Docker Compose stack in the foreground
+	docker compose up -d
 
 docker-down: ## Stop the Docker Compose stack
 	docker compose down

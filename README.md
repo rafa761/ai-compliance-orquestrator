@@ -29,16 +29,42 @@ Install dependencies:
 uv sync
 ```
 
+Create a local environment file when needed:
+
+```bash
+cp .env.example .env
+```
+
+Application configuration is centralized in `src/orchestrator/settings.py` and loaded from environment variables or `.env`. `DATABASE_URL` is used by the app. `ALEMBIC_DATABASE_URL` is optional and only needed when migrations should connect somewhere different from the app runtime URL.
+
 Run tests:
 
 ```bash
-uv run pytest -q
+make test
 ```
 
-Run the API locally without Docker:
+Run lint and tests:
 
 ```bash
-uv run uvicorn orchestrator.main:app --host 0.0.0.0 --port 8000 --reload
+make check
+```
+
+Apply database migrations:
+
+```bash
+make migrate
+```
+
+Create a new Alembic migration after model changes:
+
+```bash
+make revision m="describe change"
+```
+
+Run the API locally without Docker. Configuration is loaded from environment variables or `.env` through `src/orchestrator/settings.py`:
+
+```bash
+make run
 ```
 
 Check health:
@@ -58,7 +84,7 @@ Expected response:
 Start the local stack:
 
 ```bash
-docker compose up --build
+make docker-up
 ```
 
 Services:
@@ -71,13 +97,13 @@ Services:
 Stop the stack:
 
 ```bash
-docker compose down
+make docker-down
 ```
 
 Remove database volume as well:
 
 ```bash
-docker compose down -v
+make docker-clean
 ```
 
 ## Planned architecture

@@ -5,12 +5,18 @@ description = "Demo compliant outreach orchestration service inspired by regulat
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
     "fastapi>=0.136.3",
+    "pydantic-settings>=2.14.1",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy>=2.0.50",
     "uvicorn[standard]>=0.38.0",
 ]
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.22.1",
     "bandit>=1.8.0",
     "httpx>=0.28.1",
     "pip-audit>=2.7.0",
