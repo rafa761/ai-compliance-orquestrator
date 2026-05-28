@@ -1,0 +1,30 @@
+{
+  "external_id": "evt_account_paused_001",
+  "event_type": "account_paused",
+  "customer_external_id": "cust_taylor_lee_001",
+  "account_external_id": "acct_taylor_lee_001",
+  "payload": {
+    "source": "servicing_ops_demo",
+    "occurred_at": "2026-05-28T17:20:00Z",
+    "pause": {
+      "reason": "manual_compliance_review",
+      "paused_by": "ops_user_demo",
+      "expected_review_date": "2026-06-02"
+    },
+    "customer": {
+      "full_name": "Taylor Lee",
+      "timezone": "America/Denver",
+      "phone_number": "+13035550100",
+      "email": "taylor.lee@example.com",
+      "sms_consent": true,
+      "call_consent": true,
+      "email_consent": true,
+      "opted_out": false
+    },
+    "account": {
+      "status": "paused",
+      "balance_cents": 19000,
+      "days_past_due": 30
+    }
+  }
+}
