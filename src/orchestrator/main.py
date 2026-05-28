@@ -1,24 +1,41 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
-SERVICE_NAME = "compliant-outreach-orchestrator"
-
-app = FastAPI(
-    title="Compliant Outreach Orchestrator",
-    summary="Demo service for compliance-aware multi-channel outreach orchestration.",
-    version="0.1.0",
-)
+from orchestrator.settings import Settings, get_settings
 
 
-@app.get("/healthz", tags=["health"])
-async def healthz() -> dict[str, str]:
-    return {"service": SERVICE_NAME, "status": "ok"}
+def create_app(settings: Settings | None = None) -> FastAPI:
+    app_settings = settings or get_settings()
+
+    app = FastAPI(
+        title="Compliant Outreach Orchestrator",
+        summary="Demo service for compliance-aware multi-channel outreach orchestration.",
+        version="0.1.0",
+    )
+    app.state.settings = app_settings
+
+    @app.get("/healthz", tags=["health"])
+    async def healthz(request: Request) -> dict[str, str]:
+        current_settings: Settings = request.app.state.settings
+        return {"service": current_settings.service_name, "status": "ok"}
+
+    return app
+
+
+app = create_app()
 
 
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("orchestrator.main:app", host="0.0.0.0", port=8000, reload=True)
+    settings = get_settings()
+    uvicorn.run(
+        "orchestrator.main:app",
+        host=settings.app_host,
+        port=settings.app_port,
+        reload=True,
+        log_level=settings.log_level,
+    )
 
 
-def create_app() -> FastAPI:
-    return app
+if __name__ == "__main__":
+    run()
