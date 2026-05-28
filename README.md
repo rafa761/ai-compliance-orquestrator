@@ -15,6 +15,34 @@ This project demonstrates engineering concerns common to regulated servicing pla
 - queue-worker architecture for outbound tasks
 - mock provider adapters to isolate orchestration from vendor APIs
 
+## Planned architecture
+
+```text
+Inbound event
+  -> FastAPI webhook
+  -> idempotency check
+  -> customer/account upsert
+  -> policy engine
+  -> outreach planner
+  -> scheduled tasks
+  -> worker dispatch
+  -> mock call/SMS/email adapter
+  -> delivery result
+  -> append-only audit log
+```
+
+## Development principles
+
+- Keep policy decisions deterministic and testable.
+- Treat audit logs as product features, not debug leftovers.
+
+
+## Diagrams
+
+### Event driven call processing
+
+![Event driven call processing](docs/diagrams/event-driven-call-processing-2026-05-28.png)
+
 ## Requirements
 
 - Python 3.13
@@ -105,24 +133,3 @@ Remove database volume as well:
 ```bash
 make docker-clean
 ```
-
-## Planned architecture
-
-```text
-Inbound event
-  -> FastAPI webhook
-  -> idempotency check
-  -> customer/account upsert
-  -> policy engine
-  -> outreach planner
-  -> scheduled tasks
-  -> worker dispatch
-  -> mock call/SMS/email adapter
-  -> delivery result
-  -> append-only audit log
-```
-
-## Development principles
-
-- Keep policy decisions deterministic and testable.
-- Treat audit logs as product features, not debug leftovers.
