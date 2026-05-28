@@ -2,7 +2,7 @@
 
 A FastAPI demo service for regulated-servicing outreach workflows.
 
-The project accepts inbound customer/account events, preserves an auditable event trail, and includes a pure deterministic policy engine that will be integrated into scheduled outbound call/SMS/email orchestration in later phases.
+The project accepts inbound customer/account events, preserves an auditable event trail, and includes a pure deterministic policy engine integrated with an outreach planner that schedules or cancels outbound call/SMS/email work.
 
 The emphasis is not on a flashy chatbot. The emphasis is on the backend engineering concerns that matter when contacting real customers: idempotency, consent, opt-out handling, quiet hours, retry-safe workflows, and evidence that explains what the system did.
 
@@ -11,10 +11,11 @@ The emphasis is not on a flashy chatbot. The emphasis is on the backend engineer
 This project is being built around engineering concerns common to regulated servicing platforms:
 
 - deterministic compliance checks before outreach
-- explicit audit trail for inbound event handling; decision and action audit trails are planned
-- idempotent processing to avoid duplicate customer contact
+- explicit audit trail for inbound event handling, policy decisions, scheduled tasks, blocked outreach, deferrals, and cancellations
+- application-level idempotent processing to avoid duplicate customer contact on sequential retries
 - PostgreSQL-backed operational state
-- planned queue-worker architecture for outbound tasks
+- planner-integrated deterministic policy checks before outbound work is scheduled
+- planned queue-worker architecture for outbound dispatch
 - planned mock provider adapters to isolate orchestration from vendor APIs
 - small, testable domain components rather than opaque automation
 
@@ -44,9 +45,15 @@ Implemented:
   - explicit allow/block/defer reasons
   - unit tests for individual rules and combined decisions
 
+- Phase 4: outreach planner
+  - event-to-outreach planning for supported servicing events
+  - persisted policy decisions and scheduled outreach tasks
+  - deferred scheduling for quiet-hours decisions
+  - cancellation handling for payment, opt-out, hardship, and account pause events
+  - application-level planner idempotency for repeat inbound-event processing
+
 Planned next:
 
-- Phase 4: outreach planner
 - Phase 5: full event ingestion with customer/account snapshot upsert
 - Phase 6: worker dispatch through mock channel adapters
 - Phase 7: operational APIs
@@ -55,7 +62,7 @@ Planned next:
 
 ## Target system flow
 
-The first half of this flow is implemented through event ingestion and audit logging. Policy/planner/dispatch steps show the intended later-phase architecture.
+The webhook, idempotent event storage, audit logging, policy engine, and outreach planner are implemented. Customer/account snapshot upsert and worker dispatch remain planned later-phase work.
 
 ```mermaid
 flowchart TD
@@ -70,17 +77,19 @@ flowchart TD
     H --> I[Append event_accepted audit event]
 
     I --> J[Future: upsert customer/account snapshot]
-    J --> K[Future: policy engine integration]
-    K --> L{Future: decision per channel}
+    J --> K[Outreach planner]
+    K --> L[Policy engine]
+    L --> M{Decision per channel}
 
-    L -- block --> M[Future: persist policy decision with reasons]
-    L -- defer --> N[Future: schedule for later valid time]
-    L -- allow --> O[Future: create outreach task]
+    M -- block --> N[Persist policy decision and audit block]
+    M -- defer --> O[Schedule at defer_until unless frequency cap applies]
+    M -- allow --> P[Create outreach task]
 
-    O --> P[Future: worker dispatch]
-    P --> Q[Future: mock call/SMS/email adapter]
-    Q --> R[Future: delivery result]
-    R --> S[Future: append audit trail]
+    O --> Q[Future: worker dispatch]
+    P --> Q
+    Q --> R[Future: mock call/SMS/email adapter]
+    R --> S[Future: delivery result]
+    S --> T[Future: append delivery audit trail]
 ```
 
 ## System design
@@ -103,7 +112,7 @@ flowchart LR
         Idempotency[Idempotency helper]
         AuditHelper[Audit helper]
         Policy[Deterministic policy engine]
-        Planner[Outreach planner - planned]
+        Planner[Outreach planner]
     end
 
     subgraph Data[PostgreSQL]
@@ -130,10 +139,11 @@ flowchart LR
     Idempotency --> Inbound
     AuditHelper --> Audit
     AuditAPI --> Audit
-    Planner -. planned .-> Policy
-    Planner -. planned .-> Decisions
-    Planner -. planned .-> Tasks
-    Tasks -. planned .-> Redis
+    Planner --> Policy
+    Planner --> Decisions
+    Planner --> Tasks
+    Planner --> Audit
+    Tasks -. planned dispatch .-> Redis
     Redis -. planned .-> Worker
     Worker -. planned .-> Adapters
     Worker -. planned .-> Audit
@@ -145,13 +155,14 @@ flowchart LR
 
 - Keep policy decisions deterministic and testable.
 - Treat audit logs as product features, not debug leftovers.
-- Keep idempotency internal and derived from stable source event identity.
+- Keep application-level idempotency internal and derived from stable source event identity; add database locking/coordination before claiming production-grade concurrent processing.
 
 ## Design documentation
 
 - [Phase 1 — Database foundation](docs/phase-1-database-foundation.md)
 - [Phase 2 — Audit foundation](docs/phase-2-audit-foundation.md)
 - [Phase 3 — Policy engine](docs/phase-3-policy-engine.md)
+- [Phase 4 — Outreach planner](docs/phase-4-outreach-planner.md)
 
 ## Diagrams
 
