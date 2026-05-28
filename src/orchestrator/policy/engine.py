@@ -12,7 +12,12 @@ OUTREACH_WINDOW_END = time(hour=20)
 
 
 class PolicyInput(BaseModel):
-    """Pure data required to evaluate outreach policy."""
+    """Pure policy input with all mutable state resolved before evaluation.
+
+    The policy engine deliberately receives values, not ORM objects, so it stays
+    deterministic and side-effect free. Callers must decide which snapshot of
+    consent, opt-out state, account status, and recent-attempt count is current.
+    """
 
     model_config = ConfigDict(use_enum_values=False)
 
@@ -30,13 +35,20 @@ class PolicyInput(BaseModel):
     @field_validator("scheduled_at")
     @classmethod
     def scheduled_at_must_be_timezone_aware(cls, value: datetime) -> datetime:
+        """Require aware datetimes before conversion to the customer's local zone."""
+
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("scheduled_at must be timezone-aware")
         return value
 
 
 class PolicyResult(BaseModel):
-    """Deterministic outreach policy decision."""
+    """Deterministic decision for one proposed outreach attempt.
+
+    BLOCK means no task may be created. DEFER may schedule later only when
+    `defer_until` is present. ALLOW means the caller can schedule at the
+    proposed time.
+    """
 
     model_config = ConfigDict(use_enum_values=False)
 
@@ -47,7 +59,12 @@ class PolicyResult(BaseModel):
 
 
 def evaluate_policy(policy_input: PolicyInput) -> PolicyResult:
-    """Evaluate deterministic outreach policy rules without side effects."""
+    """Evaluate rules in compliance-first order and return auditable reasons.
+
+    Hard blocks win over deferrals, and deferrals win over allow. The reason
+    strings are intentionally stable because they appear in policy decisions and
+    audit rows used to explain the demo.
+    """
 
     block_reasons: list[str] = []
     defer_reasons: list[str] = []
@@ -112,6 +129,13 @@ def _account_status_block_reasons(policy_input: PolicyInput) -> list[str]:
 
 
 def _quiet_hours_defer_until(policy_input: PolicyInput) -> datetime | None:
+    """Return the next allowed local send time for call/SMS quiet-hour violations.
+
+    Email is exempt in this demo. Calls and SMS are allowed from 09:00 inclusive
+    to 20:00 exclusive in the customer's timezone; outside that window they move
+    to the next local opening.
+    """
+
     if policy_input.channel == OutreachChannel.EMAIL:
         return None
 
@@ -140,6 +164,12 @@ def _quiet_hours_defer_until(policy_input: PolicyInput) -> datetime | None:
 
 
 def _get_customer_timezone(customer_timezone: str) -> ZoneInfo:
+    """Resolve a customer timezone even when policy is called outside the API.
+
+    The public event API validates this first, but tests and internal callers can
+    still reach the engine directly, so invalid zones must fail here as well.
+    """
+
     try:
         return ZoneInfo(customer_timezone)
     except ZoneInfoNotFoundError as exc:

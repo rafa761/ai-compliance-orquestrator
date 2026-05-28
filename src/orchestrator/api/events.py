@@ -30,6 +30,14 @@ EventType = Literal[
 
 
 class CustomerSnapshotRequest(BaseModel):
+    """Authoritative customer snapshot carried by an inbound event.
+
+    The API treats this as the latest source-system view for mutable profile
+    and consent fields. Opt-out state is intentionally not accepted here;
+    opt-outs are modeled as their own compliance event so the audit trail can
+    show exactly when automation was stopped.
+    """
+
     external_id: IdentityField
     full_name: Annotated[str, Field(min_length=1, max_length=255)]
     timezone: Annotated[str, Field(min_length=1, max_length=64)]
@@ -42,6 +50,8 @@ class CustomerSnapshotRequest(BaseModel):
     @field_validator("timezone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
+        """Reject unknown zones before policy scheduling uses local quiet hours."""
+
         try:
             ZoneInfo(value)
         except ZoneInfoNotFoundError as exc:
@@ -50,6 +60,13 @@ class CustomerSnapshotRequest(BaseModel):
 
 
 class AccountSnapshotRequest(BaseModel):
+    """Account snapshot whose external_id is stable across event replays.
+
+    The domain layer upserts this by external_id and rejects attempts to move
+    an existing account to another customer, because outreach and audit history
+    depend on that relationship staying stable.
+    """
+
     external_id: IdentityField
     status: AccountStatus
     balance_cents: int = Field(default=0, ge=0)
@@ -57,6 +74,13 @@ class AccountSnapshotRequest(BaseModel):
 
 
 class InboundEventRequest(BaseModel):
+    """Public event-ingestion contract for source-system snapshots.
+
+    `source` + `external_id` is the event identity and retry boundary.
+    `occurred_at` is the business timestamp used for planning, which may differ
+    from when the API receives the event.
+    """
+
     source: IdentityField
     external_id: IdentityField
     event_type: EventType
@@ -68,12 +92,21 @@ class InboundEventRequest(BaseModel):
     @field_validator("occurred_at")
     @classmethod
     def validate_occurred_at(cls, value: datetime) -> datetime:
+        """Require aware timestamps so cross-timezone policy results are deterministic."""
+
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("occurred_at must be timezone-aware")
         return value
 
 
 class InboundEventResponse(BaseModel):
+    """Durable ingestion result, including idempotent replay summaries.
+
+    Counts describe the persisted outcome for the logical event. On duplicate
+    submissions they may be reconstructed from existing rows rather than newly
+    created during the current request.
+    """
+
     event_id: UUID
     status: str
     created_tasks: int
@@ -90,6 +123,14 @@ async def ingest_event(
     body: InboundEventRequest,
     session: AsyncSession = Depends(get_session),
 ) -> InboundEventResponse:
+    """Accept one source event and delegate atomic ingestion to the domain layer.
+
+    The domain workflow commits successful new events and returns existing
+    persisted results for duplicates. This route only translates validation
+    failures into HTTP 422 and leaves unexpected failures to FastAPI's normal
+    error handling.
+    """
+
     correlation_id: UUID = request.state.correlation_id
     try:
         result = await ingest_event_snapshot(

@@ -17,7 +17,13 @@ async def append_audit_event(
     actor_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> AuditEvent:
-    """Append an audit event inside the caller-owned transaction."""
+    """Append evidence inside the caller-owned transaction.
+
+    The function flushes so callers can depend on the row ID immediately, but it
+    deliberately does not commit. Audit rows should land atomically with the
+    business state they explain.
+    """
+
     audit_event = AuditEvent(
         entity_type=entity_type,
         entity_id=entity_id,

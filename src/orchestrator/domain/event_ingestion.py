@@ -28,6 +28,13 @@ from orchestrator.orchestration.planner import PlannerResult, plan_outreach_for_
 
 @dataclass(frozen=True)
 class CustomerSnapshot:
+    """Point-in-time customer state supplied by the event source.
+
+    Ingestion treats these fields as the latest mutable profile and channel
+    consent snapshot. Durable opt-out state is handled separately by opt-out
+    events so a later ordinary snapshot cannot accidentally erase it.
+    """
+
     external_id: str
     full_name: str
     timezone: str
@@ -40,6 +47,14 @@ class CustomerSnapshot:
 
 @dataclass(frozen=True)
 class AccountSnapshot:
+    """Point-in-time account state with a stable external identity.
+
+    The external account ID is the lookup key for mutable account fields such as
+    status, balance, and days past due. Once seen, that external ID must not move
+    to another customer because audit lineage and scheduled outreach depend on
+    the relationship.
+    """
+
     external_id: str
     status: AccountStatus
     balance_cents: int
@@ -48,6 +63,12 @@ class AccountSnapshot:
 
 @dataclass(frozen=True)
 class EventIngestionResult:
+    """API-facing summary of the durable side effects for one logical event.
+
+    For duplicate submissions these counts are reconstructed from persisted
+    rows, not assumed from the current request, so retries stay replay-safe.
+    """
+
     event_id: UUID
     created_tasks: int
     blocked_tasks: int
@@ -72,6 +93,14 @@ async def ingest_event_snapshot(
     metadata: dict[str, Any],
     correlation_id: UUID,
 ) -> EventIngestionResult:
+    """Persist one source event, its snapshots, audit rows, and planner result.
+
+    This function owns the transaction for successful ingestion: snapshots,
+    inbound event, audit trail, planner side effects, and processing status are
+    committed together. `source` + `external_id` is the event identity; duplicate
+    calls return the existing persisted result instead of re-running the planner.
+    """
+
     existing_event = await _find_existing_event(
         session, source=source, external_id=external_id
     )
@@ -163,6 +192,12 @@ async def _find_existing_event(
 async def _upsert_customer(
     session: AsyncSession, snapshot: CustomerSnapshot
 ) -> Customer:
+    """Apply the latest source snapshot for mutable customer fields.
+
+    This intentionally uses latest-write-wins for profile and consent data while
+    leaving event-derived opt-out state under planner control.
+    """
+
     customer = await session.scalar(
         select(Customer).where(Customer.external_id == snapshot.external_id)
     )
@@ -185,6 +220,13 @@ async def _upsert_customer(
 async def _upsert_account(
     session: AsyncSession, snapshot: AccountSnapshot, customer: Customer
 ) -> Account:
+    """Apply account state while preserving account/customer lineage.
+
+    Reassigning an existing account external_id to another customer is rejected
+    because it would make historical policy decisions and outreach tasks
+    ambiguous.
+    """
+
     account = await session.scalar(
         select(Account).where(Account.external_id == snapshot.external_id)
     )
@@ -210,6 +252,12 @@ async def _upsert_account(
 async def _result_from_existing_event(
     session: AsyncSession, event: InboundEvent
 ) -> EventIngestionResult:
+    """Rebuild a retry response from durable side effects without mutating state.
+
+    Cancellation counts come from audit rows rather than task status alone so the
+    response attributes each cancellation to the inbound event that caused it.
+    """
+
     policy_decisions = await session.scalar(
         select(func.count())
         .select_from(PolicyDecision)
@@ -259,6 +307,8 @@ async def _result_from_existing_event(
 def _result_from_planner(
     event_id: UUID, planner_result: PlannerResult
 ) -> EventIngestionResult:
+    """Translate planner terminology into the public ingestion response fields."""
+
     return EventIngestionResult(
         event_id=event_id,
         created_tasks=planner_result.created_tasks,
