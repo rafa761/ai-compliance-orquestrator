@@ -7,8 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from orchestrator.audit import append_audit_event
 from orchestrator.db import get_session
+from orchestrator.domain.audit_log import append_audit_event
+from orchestrator.domain.inbound_events import inbound_event_idempotency_key
 from orchestrator.main import create_app
 from orchestrator.models import AuditActorType, AuditEvent, Base
 from orchestrator.settings import Settings
@@ -98,6 +99,7 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
     correlation_id = uuid4()
     other_correlation_id = uuid4()
     payload = {
+        "source": "core_banking_demo",
         "external_id": "event_001",
         "event_type": "account_delinquent",
         "customer_external_id": "cust_001",
@@ -108,10 +110,7 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
     ingest_response = await client.post(
         "/v1/events",
         json=payload,
-        headers={
-            "Idempotency-Key": "idem_001",
-            "X-Correlation-ID": str(correlation_id),
-        },
+        headers={"X-Correlation-ID": str(correlation_id)},
     )
 
     assert ingest_response.status_code == 200
@@ -137,15 +136,23 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
     }
     assert {event["correlation_id"] for event in audit_events} == {str(correlation_id)}
     assert {event["entity_id"] for event in audit_events} == {ingest_body["event_id"]}
+    expected_idempotency_key = inbound_event_idempotency_key(
+        source="core_banking_demo",
+        external_id="event_001",
+    )
+    assert {event["payload"]["idempotency_key"] for event in audit_events} == {
+        expected_idempotency_key
+    }
     assert non_matching_response.json() == []
 
 
-async def test_duplicate_event_idempotency_key_returns_existing_event_without_new_audit(
+async def test_duplicate_source_event_identity_returns_existing_event_without_new_audit(
     client: AsyncClient,
 ) -> None:
     first_correlation_id = uuid4()
     second_correlation_id = uuid4()
     payload = {
+        "source": "core_banking_demo",
         "external_id": "event_001",
         "event_type": "account_delinquent",
         "customer_external_id": "cust_001",
@@ -156,18 +163,12 @@ async def test_duplicate_event_idempotency_key_returns_existing_event_without_ne
     first_response = await client.post(
         "/v1/events",
         json=payload,
-        headers={
-            "Idempotency-Key": "idem_001",
-            "X-Correlation-ID": str(first_correlation_id),
-        },
+        headers={"X-Correlation-ID": str(first_correlation_id)},
     )
     duplicate_response = await client.post(
         "/v1/events",
-        json={**payload, "external_id": "event_001_retry"},
-        headers={
-            "Idempotency-Key": "idem_001",
-            "X-Correlation-ID": str(second_correlation_id),
-        },
+        json={**payload, "payload": {"source": "retry"}},
+        headers={"X-Correlation-ID": str(second_correlation_id)},
     )
 
     assert first_response.status_code == 200
@@ -184,3 +185,77 @@ async def test_duplicate_event_idempotency_key_returns_existing_event_without_ne
 
     assert len(first_audit_response.json()) == 2
     assert duplicate_audit_response.json() == []
+
+
+async def test_idempotency_key_header_does_not_define_event_identity(
+    client: AsyncClient,
+) -> None:
+    payload = {
+        "source": "core_banking_demo",
+        "external_id": "event_001",
+        "event_type": "account_delinquent",
+        "customer_external_id": "cust_001",
+        "account_external_id": "acct_001",
+        "payload": {},
+    }
+
+    first_response = await client.post(
+        "/v1/events",
+        json=payload,
+        headers={"Idempotency-Key": "caller-key-1"},
+    )
+    duplicate_response = await client.post(
+        "/v1/events",
+        json=payload,
+        headers={"Idempotency-Key": "caller-key-2"},
+    )
+
+    assert first_response.status_code == 200
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.json()["event_id"] == first_response.json()["event_id"]
+
+
+async def test_event_source_and_external_id_are_required(client: AsyncClient) -> None:
+    payload = {
+        "event_type": "account_delinquent",
+        "customer_external_id": "cust_001",
+        "account_external_id": "acct_001",
+        "payload": {},
+    }
+
+    missing_source_response = await client.post(
+        "/v1/events",
+        json={**payload, "external_id": "event_001"},
+    )
+    missing_external_id_response = await client.post(
+        "/v1/events",
+        json={**payload, "source": "core_banking_demo"},
+    )
+
+    assert missing_source_response.status_code == 422
+    assert missing_external_id_response.status_code == 422
+
+
+async def test_same_external_id_from_different_sources_creates_distinct_events(
+    client: AsyncClient,
+) -> None:
+    payload = {
+        "external_id": "event_001",
+        "event_type": "account_delinquent",
+        "customer_external_id": "cust_001",
+        "account_external_id": "acct_001",
+        "payload": {},
+    }
+
+    first_response = await client.post(
+        "/v1/events",
+        json={**payload, "source": "core_banking_demo"},
+    )
+    second_response = await client.post(
+        "/v1/events",
+        json={**payload, "source": "crm_demo"},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json()["event_id"] != first_response.json()["event_id"]

@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 
 from orchestrator.api.audit import router as audit_router
+from orchestrator.api.correlation import correlation_id_middleware
 from orchestrator.api.events import router as events_router
 from orchestrator.api.health import router as health_router
-from orchestrator.correlation import correlation_id_middleware
 from orchestrator.settings import Settings, get_settings
 
 
