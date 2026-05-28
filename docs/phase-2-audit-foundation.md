@@ -95,8 +95,6 @@ It belongs in a header because:
 - Logs, proxies, API gateways, load balancers, and tracing systems conventionally use headers for request tracing.
 - It keeps the body focused on business data: event type, customer ID, account ID, and payload.
 
-If correlation ID lived in the body, every endpoint schema would need to repeat it. That creates noise and makes cross-cutting tracing harder. Middleware is the appropriate place because correlation is a cross-cutting concern: every request should get one, regardless of which route handles it.
-
 ## Correlation ID vs idempotency key
 
 These two headers solve different problems.
@@ -131,7 +129,7 @@ Likely callers:
 - A core banking system
 - A CRM/customer account platform
 - A webhook simulator in the demo
-- A test script used during the portfolio walkthrough
+- A test script
 
 The caller sends events such as:
 
@@ -164,36 +162,6 @@ Likely callers:
 - Load balancers
 - Monitoring systems
 - Developer sanity checks
-
-## Module organization
-
-API code is intentionally split by concern:
-
-- `src/orchestrator/main.py`
-  - creates the FastAPI app
-  - stores settings on app state
-  - registers middleware
-  - includes routers
-
-- `src/orchestrator/api/events.py`
-  - event ingestion route
-  - inbound event request/response schemas
-
-- `src/orchestrator/api/audit.py`
-  - audit query route
-  - audit response schema
-
-- `src/orchestrator/api/health.py`
-  - health route
-
-- `src/orchestrator/correlation.py`
-  - correlation ID parsing
-  - HTTP middleware
-
-- `src/orchestrator/audit.py`
-  - domain helper for appending audit events inside the caller-owned transaction
-
-This keeps `main.py` from becoming a junk drawer. Route handlers and schemas belong in API modules; application assembly belongs in `main.py`.
 
 ## Design decisions
 
@@ -238,44 +206,6 @@ Reasoning:
 - This keeps Phase 2 behavior simple and explainable.
 
 A later production version may still log duplicate retry attempts separately in operational logs or in a lower-level request log. For this demo phase, the domain audit trail stays focused on accepted work.
-
-### Keep implementation deliberately small
-
-Phase 2 does not implement policy rules, task scheduling, workers, or provider callbacks.
-
-Reasoning:
-
-- This phase creates the spine that those features will reuse.
-- Building the audit/correlation/idempotency foundation first makes later phases easier to explain.
-- It avoids mixing too many responsibilities into one phase.
-
-## Tests added in this phase
-
-The tests cover:
-
-- `append_audit_event` flushes without committing
-- valid `X-Correlation-ID` is propagated to the response
-- invalid `X-Correlation-ID` is replaced with a generated UUID
-- `POST /v1/events` creates audit events
-- `GET /v1/audit?correlation_id=...` filters audit events
-- duplicate `Idempotency-Key` returns the existing event
-- duplicate idempotency retry does not create extra audit rows
-
-## Current limitations
-
-This phase is intentionally not production-complete.
-
-Known limitations:
-
-- The event ingestion schema is minimal.
-- No authentication or API key enforcement is implemented yet.
-- No customer/account upsert logic is implemented yet.
-- No policy engine is invoked yet.
-- No outreach tasks are created yet.
-- No background worker or queue is used yet.
-- Concurrent duplicate idempotency handling uses select-before-insert rather than a database upsert or `IntegrityError` recovery path.
-
-The last point is acceptable for the demo phase, but a production implementation should harden it. The database uniqueness constraint protects the data model, but the API path should eventually handle concurrent duplicate inserts cleanly.
 
 ## Narrative
 
