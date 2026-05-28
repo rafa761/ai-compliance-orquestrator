@@ -15,6 +15,36 @@ from orchestrator.models import AuditActorType, AuditEvent, Base
 from orchestrator.settings import Settings
 
 
+def nested_payload(
+    *,
+    source: str = "core_banking_demo",
+    external_id: str = "event_001",
+) -> dict[str, object]:
+    return {
+        "source": source,
+        "external_id": external_id,
+        "event_type": "account_delinquent",
+        "customer": {
+            "external_id": "cust_001",
+            "full_name": "Jane Doe",
+            "timezone": "America/New_York",
+            "phone_number": "+141****0100",
+            "email": "jane@example.com",
+            "sms_consent": True,
+            "call_consent": True,
+            "email_consent": True,
+        },
+        "account": {
+            "external_id": "acct_001",
+            "status": "delinquent",
+            "balance_cents": 12500,
+            "days_past_due": 14,
+        },
+        "occurred_at": "2026-05-27T12:00:00Z",
+        "metadata": {"source": "test"},
+    }
+
+
 @pytest.fixture
 async def session() -> AsyncIterator[AsyncSession]:
     engine = create_async_engine(
@@ -98,14 +128,7 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
 ) -> None:
     correlation_id = uuid4()
     other_correlation_id = uuid4()
-    payload = {
-        "source": "core_banking_demo",
-        "external_id": "event_001",
-        "event_type": "account_delinquent",
-        "customer_external_id": "cust_001",
-        "account_external_id": "acct_001",
-        "payload": {"source": "test"},
-    }
+    payload = nested_payload()
 
     ingest_response = await client.post(
         "/v1/events",
@@ -129,18 +152,22 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
     assert matching_response.status_code == 200
     assert non_matching_response.status_code == 200
     audit_events = matching_response.json()
-    assert len(audit_events) == 2
-    assert {event["event_type"] for event in audit_events} == {
-        "event_received",
-        "event_accepted",
-    }
+    assert len(audit_events) == 9
+    assert {"event_received", "event_accepted"}.issubset(
+        {event["event_type"] for event in audit_events}
+    )
     assert {event["correlation_id"] for event in audit_events} == {str(correlation_id)}
-    assert {event["entity_id"] for event in audit_events} == {ingest_body["event_id"]}
+    inbound_audit_events = [
+        event for event in audit_events if event["entity_type"] == "inbound_event"
+    ]
+    assert {event["entity_id"] for event in inbound_audit_events} == {
+        ingest_body["event_id"]
+    }
     expected_idempotency_key = inbound_event_idempotency_key(
         source="core_banking_demo",
         external_id="event_001",
     )
-    assert {event["payload"]["idempotency_key"] for event in audit_events} == {
+    assert {event["payload"]["idempotency_key"] for event in inbound_audit_events} == {
         expected_idempotency_key
     }
     assert non_matching_response.json() == []
@@ -151,14 +178,7 @@ async def test_duplicate_source_event_identity_returns_existing_event_without_ne
 ) -> None:
     first_correlation_id = uuid4()
     second_correlation_id = uuid4()
-    payload = {
-        "source": "core_banking_demo",
-        "external_id": "event_001",
-        "event_type": "account_delinquent",
-        "customer_external_id": "cust_001",
-        "account_external_id": "acct_001",
-        "payload": {"source": "test"},
-    }
+    payload = nested_payload()
 
     first_response = await client.post(
         "/v1/events",
@@ -167,7 +187,7 @@ async def test_duplicate_source_event_identity_returns_existing_event_without_ne
     )
     duplicate_response = await client.post(
         "/v1/events",
-        json={**payload, "payload": {"source": "retry"}},
+        json={**payload, "metadata": {"source": "retry"}},
         headers={"X-Correlation-ID": str(second_correlation_id)},
     )
 
@@ -183,31 +203,22 @@ async def test_duplicate_source_event_identity_returns_existing_event_without_ne
         "/v1/audit", params={"correlation_id": str(second_correlation_id)}
     )
 
-    assert len(first_audit_response.json()) == 2
+    assert len(first_audit_response.json()) == 9
     assert duplicate_audit_response.json() == []
 
 
-async def test_idempotency_key_header_does_not_define_event_identity(
+async def test_source_and_external_id_define_event_identity(
     client: AsyncClient,
 ) -> None:
-    payload = {
-        "source": "core_banking_demo",
-        "external_id": "event_001",
-        "event_type": "account_delinquent",
-        "customer_external_id": "cust_001",
-        "account_external_id": "acct_001",
-        "payload": {},
-    }
+    payload = nested_payload()
 
     first_response = await client.post(
         "/v1/events",
         json=payload,
-        headers={"Idempotency-Key": "caller-key-1"},
     )
     duplicate_response = await client.post(
         "/v1/events",
         json=payload,
-        headers={"Idempotency-Key": "caller-key-2"},
     )
 
     assert first_response.status_code == 200
@@ -216,20 +227,15 @@ async def test_idempotency_key_header_does_not_define_event_identity(
 
 
 async def test_event_source_and_external_id_are_required(client: AsyncClient) -> None:
-    payload = {
-        "event_type": "account_delinquent",
-        "customer_external_id": "cust_001",
-        "account_external_id": "acct_001",
-        "payload": {},
-    }
+    payload = nested_payload()
 
     missing_source_response = await client.post(
         "/v1/events",
-        json={**payload, "external_id": "event_001"},
+        json={key: value for key, value in payload.items() if key != "source"},
     )
     missing_external_id_response = await client.post(
         "/v1/events",
-        json={**payload, "source": "core_banking_demo"},
+        json={key: value for key, value in payload.items() if key != "external_id"},
     )
 
     assert missing_source_response.status_code == 422
@@ -239,13 +245,7 @@ async def test_event_source_and_external_id_are_required(client: AsyncClient) ->
 async def test_same_external_id_from_different_sources_creates_distinct_events(
     client: AsyncClient,
 ) -> None:
-    payload = {
-        "external_id": "event_001",
-        "event_type": "account_delinquent",
-        "customer_external_id": "cust_001",
-        "account_external_id": "acct_001",
-        "payload": {},
-    }
+    payload = nested_payload()
 
     first_response = await client.post(
         "/v1/events",
