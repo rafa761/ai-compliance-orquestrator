@@ -55,7 +55,7 @@ The six domain tables are:
 
 ### Keep idempotency uniqueness in the database
 
-We do keep unique indexes/constraints for idempotency keys and external IDs.
+We do keep unique indexes/constraints for idempotency keys and stable external identities.
 
 Reasoning:
 

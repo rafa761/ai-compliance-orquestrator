@@ -66,10 +66,46 @@ async def test_customer_external_id_is_unique(session: AsyncSession) -> None:
         await session.commit()
 
 
+async def test_inbound_event_external_id_can_repeat_across_sources(
+    session: AsyncSession,
+) -> None:
+    session.add_all(
+        [
+            InboundEvent(
+                source="core_banking_demo",
+                external_id="event_001",
+                event_type="account_delinquent",
+                customer_external_id="cust_001",
+                account_external_id="acct_001",
+                payload={},
+                idempotency_key="inbound_event:core_banking_demo:event_001",
+            ),
+            InboundEvent(
+                source="crm_demo",
+                external_id="event_001",
+                event_type="account_delinquent",
+                customer_external_id="cust_001",
+                account_external_id="acct_001",
+                payload={},
+                idempotency_key="inbound_event:crm_demo:event_001",
+            ),
+        ]
+    )
+
+    await session.commit()
+
+    assert (
+        await session.scalar(
+            select(InboundEvent).where(InboundEvent.source == "crm_demo")
+        )
+    ) is not None
+
+
 async def test_inbound_event_idempotency_key_is_unique(session: AsyncSession) -> None:
     session.add_all(
         [
             InboundEvent(
+                source="core_banking_demo",
                 external_id="event_001",
                 event_type="account_delinquent",
                 customer_external_id="cust_001",
@@ -78,6 +114,7 @@ async def test_inbound_event_idempotency_key_is_unique(session: AsyncSession) ->
                 idempotency_key="idem_001",
             ),
             InboundEvent(
+                source="core_banking_demo",
                 external_id="event_002",
                 event_type="account_delinquent",
                 customer_external_id="cust_001",
@@ -201,8 +238,13 @@ async def test_model_tables_match_phase_1_scope() -> None:
 
     assert Customer.external_id.property.columns[0].unique is True
     assert Account.external_id.property.columns[0].unique is True
+    assert InboundEvent.external_id.property.columns[0].unique is not True
     assert InboundEvent.idempotency_key.property.columns[0].unique is True
     assert OutreachTask.idempotency_key.property.columns[0].unique is True
+    assert {
+        constraint.name
+        for constraint in Base.metadata.tables["inbound_events"].constraints
+    } >= {"uq_inbound_events_source_external_id"}
     assert InboundEvent.processing_status.property.columns[0].default.arg is (
         InboundEventStatus.RECEIVED
     )

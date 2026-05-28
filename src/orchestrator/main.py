@@ -1,5 +1,9 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 
+from orchestrator.api.audit import router as audit_router
+from orchestrator.api.correlation import correlation_id_middleware
+from orchestrator.api.events import router as events_router
+from orchestrator.api.health import router as health_router
 from orchestrator.settings import Settings, get_settings
 
 
@@ -12,12 +16,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
     )
     app.state.settings = app_settings
-
-    @app.get("/healthz", tags=["health"])
-    async def healthz(request: Request) -> dict[str, str]:
-        current_settings: Settings = request.app.state.settings
-        return {"service": current_settings.service_name, "status": "ok"}
-
+    app.middleware("http")(correlation_id_middleware)
+    app.include_router(health_router)
+    app.include_router(events_router)
+    app.include_router(audit_router)
     return app
 
 

@@ -1,4 +1,4 @@
-name: compliant-outreach-orchestrator
+name: co
 
 services:
   api:
