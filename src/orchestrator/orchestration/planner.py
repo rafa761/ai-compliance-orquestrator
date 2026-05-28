@@ -41,6 +41,12 @@ _PROCESSED_MARKERS = {
 
 @dataclass(frozen=True)
 class PlannerResult:
+    """Summary of planner side effects for one inbound event.
+
+    Idempotent no-op replays intentionally return zeroes from the planner itself;
+    the ingestion layer reconstructs duplicate API counts from persisted rows.
+    """
+
     inbound_event_id: UUID
     created_tasks: int = 0
     cancelled_tasks: int = 0
@@ -63,7 +69,13 @@ async def plan_outreach_for_event(
     now: datetime | None = None,
     frequency_cap: int = 3,
 ) -> PlannerResult:
-    """Plan outreach for an existing inbound event inside a caller-owned transaction."""
+    """Plan side effects for an existing inbound event inside caller transaction.
+
+    Delinquency and payment-failure events create policy decisions and possibly
+    tasks. Payment, opt-out, hardship, and pause events cancel scheduled work or
+    update durable state. This function does not commit; ingestion owns the
+    larger atomic transaction and marks the event processed afterward.
+    """
 
     now = _aware_now(now)
     inbound_event = await session.get(InboundEvent, inbound_event_id)
@@ -178,6 +190,13 @@ async def _plan_policy_event(
     now: datetime,
     frequency_cap: int,
 ) -> PlannerResult:
+    """Evaluate every candidate channel and persist the explanation.
+
+    A PolicyDecision is stored for each candidate even when outreach is blocked
+    or deferred. Blocked attempts are audited but never become OutreachTask rows;
+    allowed and schedulable deferred attempts consume the in-pass frequency cap.
+    """
+
     existing_decision = await session.scalar(
         select(PolicyDecision.id).where(
             PolicyDecision.inbound_event_id == inbound_event.id
@@ -319,6 +338,8 @@ async def _handle_cancellation_event(
     account: Account,
     correlation_id: UUID,
 ) -> PlannerResult:
+    """Handle payment_received as cancellation-only work with audit idempotency."""
+
     if await _has_processed_marker(session, inbound_event):
         return PlannerResult(inbound_event_id=inbound_event.id)
     cancelled = await _cancel_scheduled_tasks(
@@ -340,6 +361,13 @@ async def _cancel_scheduled_tasks(
     account: Account,
     correlation_id: UUID,
 ) -> int:
+    """Cancel only scheduled tasks and attribute each cancellation to this event.
+
+    Dispatching, sent, and failed tasks are historical attempts and are not
+    rewritten. The audit payload links every cancellation to the triggering
+    inbound event so duplicate responses can be rebuilt later.
+    """
+
     tasks = (
         await session.scalars(
             select(OutreachTask).where(
@@ -370,6 +398,13 @@ async def _cancel_scheduled_tasks(
 async def _recent_attempt_count(
     session: AsyncSession, *, customer: Customer, now: datetime
 ) -> int:
+    """Count contact attempts for the customer's rolling 24-hour cap.
+
+    Scheduled, dispatching, sent, and failed tasks all count because each
+    represents outreach pressure from the customer's perspective. The demo uses
+    task creation time for the rolling window, not scheduled or sent time.
+    """
+
     since = now - timedelta(hours=24)
     tasks = (
         await session.scalars(
@@ -386,6 +421,13 @@ async def _recent_attempt_count(
 def _proposals_for_event(
     event_type: str, now: datetime, customer_timezone: str
 ) -> list[ProposedOutreach]:
+    """Return demo outreach sequencing before consent and compliance checks.
+
+    Delinquency proposes email now, SMS later, and a next-business-day call.
+    Payment failure proposes email now and SMS shortly after. Policy evaluation
+    may still block, defer, or reschedule each candidate.
+    """
+
     if event_type == "account_delinquent":
         return [
             ProposedOutreach(OutreachChannel.EMAIL, now),
@@ -404,6 +446,12 @@ def _proposals_for_event(
 
 
 def _next_business_day_at_10(now: datetime, customer_timezone: str) -> datetime:
+    """Schedule the call in customer local time, skipping weekends only.
+
+    Holidays are intentionally out of scope for the demo so the scheduling rule
+    remains easy to explain.
+    """
+
     local_now = now.astimezone(ZoneInfo(customer_timezone))
     candidate = local_now.date() + timedelta(days=1)
     while candidate.weekday() >= 5:
@@ -418,6 +466,8 @@ def _next_business_day_at_10(now: datetime, customer_timezone: str) -> datetime:
 async def _load_customer_and_account(
     session: AsyncSession, inbound_event: InboundEvent
 ) -> tuple[Customer, Account]:
+    """Resolve event snapshots back to current rows and re-check their relationship."""
+
     customer = await session.scalar(
         select(Customer).where(
             Customer.external_id == inbound_event.customer_external_id
@@ -442,6 +492,12 @@ async def _load_customer_and_account(
 async def _has_processed_marker(
     session: AsyncSession, inbound_event: InboundEvent
 ) -> bool:
+    """Use audit markers as idempotency for state/cancellation events.
+
+    These events may not create PolicyDecision rows, so the planner needs a
+    durable marker that their non-policy side effects already ran.
+    """
+
     event_type = _PROCESSED_MARKERS[inbound_event.event_type]
     marker = await session.scalar(
         select(AuditEvent.id).where(
@@ -456,6 +512,12 @@ async def _has_processed_marker(
 async def _append_processed_marker(
     session: AsyncSession, inbound_event: InboundEvent, correlation_id: UUID
 ) -> None:
+    """Write the idempotency marker for cancellation/state-change events.
+
+    These markers live in the audit log rather than a separate table so the
+    replay guard and the human-readable evidence trail stay in one place.
+    """
+
     event_type = _PROCESSED_MARKERS[inbound_event.event_type]
     await append_audit_event(
         session,
@@ -482,6 +544,12 @@ async def _audit(
     entity_id: str,
     payload: dict[str, object],
 ) -> None:
+    """Attach source-event context to every planner audit row.
+
+    Cancellation and policy rows point at different entity types, so this common
+    wrapper keeps the triggering inbound event visible in all of them.
+    """
+
     await append_audit_event(
         session,
         entity_type=entity_type,
@@ -499,6 +567,8 @@ async def _audit(
 
 
 def _aware_now(now: datetime | None) -> datetime:
+    """Normalize planner time while rejecting naive datetimes."""
+
     if now is None:
         return datetime.now(UTC)
     if now.tzinfo is None or now.utcoffset() is None:

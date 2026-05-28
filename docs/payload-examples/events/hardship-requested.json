@@ -2,29 +2,28 @@
   "source": "crm_demo",
   "external_id": "evt_hardship_requested_001",
   "event_type": "hardship_requested",
-  "customer_external_id": "cust_alex_johnson_001",
-  "account_external_id": "acct_alex_johnson_001",
-  "payload": {
-    "occurred_at": "2026-05-28T15:45:00Z",
+  "customer": {
+    "external_id": "cust_alex_johnson_001",
+    "full_name": "Alex Johnson",
+    "timezone": "America/Los_Angeles",
+    "phone_number": "+14155550101",
+    "email": "alex.johnson@example.com",
+    "sms_consent": true,
+    "call_consent": true,
+    "email_consent": true
+  },
+  "account": {
+    "external_id": "acct_alex_johnson_001",
+    "status": "paused",
+    "balance_cents": 23100,
+    "days_past_due": 21
+  },
+  "occurred_at": "2026-05-28T15:45:00Z",
+  "metadata": {
     "hardship": {
       "reason": "temporary_income_loss",
       "requested_channel": "phone",
       "notes": "Customer requested manual review before automated outreach continues."
-    },
-    "customer": {
-      "full_name": "Alex Johnson",
-      "timezone": "America/Los_Angeles",
-      "phone_number": "+14155550101",
-      "email": "alex.johnson@example.com",
-      "sms_consent": true,
-      "call_consent": true,
-      "email_consent": true,
-      "opted_out": false
-    },
-    "account": {
-      "status": "paused",
-      "balance_cents": 23100,
-      "days_past_due": 21
     }
   }
 }

@@ -8,6 +8,12 @@ from orchestrator.settings import Settings, get_settings
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the FastAPI app with injectable settings for tests and demos.
+
+    Settings are stored on app.state so lightweight handlers such as healthz can
+    report the active service identity without re-reading environment variables.
+    """
+
     app_settings = settings or get_settings()
 
     app = FastAPI(
@@ -27,6 +33,8 @@ app = create_app()
 
 
 def run() -> None:
+    """Local development entry point; runs uvicorn with reload enabled."""
+
     import uvicorn
 
     settings = get_settings()

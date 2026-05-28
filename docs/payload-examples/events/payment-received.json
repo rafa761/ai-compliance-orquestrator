@@ -2,29 +2,28 @@
   "source": "payments_demo",
   "external_id": "evt_payment_received_001",
   "event_type": "payment_received",
-  "customer_external_id": "cust_maria_santos_001",
-  "account_external_id": "acct_maria_santos_001",
-  "payload": {
-    "occurred_at": "2026-05-28T14:30:00Z",
+  "customer": {
+    "external_id": "cust_maria_santos_001",
+    "full_name": "Maria Santos",
+    "timezone": "America/New_York",
+    "phone_number": "+16465550100",
+    "email": "maria.santos@example.com",
+    "sms_consent": true,
+    "call_consent": true,
+    "email_consent": true
+  },
+  "account": {
+    "external_id": "acct_maria_santos_001",
+    "status": "resolved",
+    "balance_cents": 0,
+    "days_past_due": 0
+  },
+  "occurred_at": "2026-05-28T14:30:00Z",
+  "metadata": {
     "payment": {
       "amount_cents": 12500,
       "received_at": "2026-05-28T14:25:00Z",
       "provider_reference": "pay_demo_002"
-    },
-    "customer": {
-      "full_name": "Maria Santos",
-      "timezone": "America/New_York",
-      "phone_number": "+16465550100",
-      "email": "maria.santos@example.com",
-      "sms_consent": true,
-      "call_consent": true,
-      "email_consent": true,
-      "opted_out": false
-    },
-    "account": {
-      "status": "resolved",
-      "balance_cents": 0,
-      "days_past_due": 0
     }
   }
 }

@@ -14,6 +14,7 @@ This project is being built around engineering concerns common to regulated serv
 - explicit audit trail for inbound event handling, policy decisions, scheduled tasks, blocked outreach, deferrals, and cancellations
 - application-level idempotent processing to avoid duplicate customer contact on sequential retries
 - PostgreSQL-backed operational state
+- full customer/account snapshot ingestion before planning
 - planner-integrated deterministic policy checks before outbound work is scheduled
 - planned queue-worker architecture for outbound dispatch
 - planned mock provider adapters to isolate orchestration from vendor APIs
@@ -52,9 +53,15 @@ Implemented:
   - cancellation handling for payment, opt-out, hardship, and account pause events
   - application-level planner idempotency for repeat inbound-event processing
 
+- Phase 5: full event ingestion
+  - nested inbound event API with customer/account snapshots
+  - customer and account upsert before planning
+  - strict event type, source identity, account status, and timezone validation
+  - duplicate `source` + `external_id` handling without snapshot mutation or duplicate audit/planner side effects
+  - one transaction for event storage, audit, planner execution, and processed status update
+
 Planned next:
 
-- Phase 5: full event ingestion with customer/account snapshot upsert
 - Phase 6: worker dispatch through mock channel adapters
 - Phase 7: operational APIs
 - Phase 8: demo data and walkthrough script
@@ -62,7 +69,7 @@ Planned next:
 
 ## Target system flow
 
-The webhook, idempotent event storage, audit logging, policy engine, and outreach planner are implemented. Customer/account snapshot upsert and worker dispatch remain planned later-phase work.
+The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, and outreach planner are implemented. Worker dispatch remains planned later-phase work.
 
 ```mermaid
 flowchart TD
@@ -71,12 +78,12 @@ flowchart TD
     C --> D[Internal idempotency check]
     D --> E{Duplicate source event?}
 
-    E -- yes --> F[Return existing event ID]
-    E -- no --> G[Store inbound event]
-    G --> H[Append event_received audit event]
-    H --> I[Append event_accepted audit event]
+    E -- yes --> F[Return existing event ID and reconstructed counts]
+    E -- no --> G[Upsert customer/account snapshot]
+    G --> H[Store inbound event]
+    H --> I[Append event_received audit event]
+    I --> J[Append event_accepted audit event]
 
-    I --> J[Future: upsert customer/account snapshot]
     J --> K[Outreach planner]
     K --> L[Policy engine]
     L --> M{Decision per channel}
@@ -110,6 +117,7 @@ flowchart LR
 
     subgraph Domain[Domain layer]
         Idempotency[Idempotency helper]
+        SnapshotUpsert[Snapshot upsert]
         AuditHelper[Audit helper]
         Policy[Deterministic policy engine]
         Planner[Outreach planner]
@@ -135,7 +143,12 @@ flowchart LR
     Demo --> AuditAPI
     Events --> Correlation
     Events --> Idempotency
+    Events --> SnapshotUpsert
     Events --> AuditHelper
+    Events --> Planner
+    Events --> Inbound
+    SnapshotUpsert --> Customers
+    SnapshotUpsert --> Accounts
     Idempotency --> Inbound
     AuditHelper --> Audit
     AuditAPI --> Audit
@@ -147,8 +160,6 @@ flowchart LR
     Redis -. planned .-> Worker
     Worker -. planned .-> Adapters
     Worker -. planned .-> Audit
-    Events -. later phases .-> Customers
-    Events -. later phases .-> Accounts
 ```
 
 ## Development principles
@@ -163,6 +174,7 @@ flowchart LR
 - [Phase 2 — Audit foundation](docs/phase-2-audit-foundation.md)
 - [Phase 3 — Policy engine](docs/phase-3-policy-engine.md)
 - [Phase 4 — Outreach planner](docs/phase-4-outreach-planner.md)
+- [Phase 5 — Full event ingestion](docs/phase-5-event-ingestion.md)
 
 ## Diagrams
 

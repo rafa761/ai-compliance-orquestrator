@@ -66,6 +66,12 @@ class AuditActorType(StrEnum):
 
 
 def enum_column(enum_type: type[StrEnum], name: str) -> SqlEnum:
+    """Store enum values as portable strings instead of database-native enums.
+
+    That keeps SQLite tests, PostgreSQL migrations, and local demo data aligned
+    without dialect-specific enum DDL.
+    """
+
     return SqlEnum(
         enum_type,
         name=name,
@@ -76,6 +82,13 @@ def enum_column(enum_type: type[StrEnum], name: str) -> SqlEnum:
 
 
 class Customer(Base):
+    """Customer snapshot keyed by source-system identity.
+
+    Consent flags represent the latest known channel permissions. `opted_out` is
+    a durable compliance override produced by opt-out events, not a casual field
+    overwritten by ordinary customer snapshots.
+    """
+
     __tablename__ = "customers"
 
     id: Mapped[UUID] = mapped_column(
@@ -108,6 +121,12 @@ class Customer(Base):
 
 
 class Account(Base):
+    """Serviced account whose customer relationship must remain stable.
+
+    `external_id` is globally unique because policy decisions, outreach tasks,
+    and audit rows rely on a consistent account/customer lineage.
+    """
+
     __tablename__ = "accounts"
 
     id: Mapped[UUID] = mapped_column(
@@ -138,6 +157,13 @@ class Account(Base):
 
 
 class InboundEvent(Base):
+    """Accepted source event and the replay boundary for ingestion.
+
+    `source` + `external_id` is the business identity. The derived
+    idempotency_key gives the database a compact unique value, while `payload`
+    preserves the accepted source snapshot for audit and debugging.
+    """
+
     __tablename__ = "inbound_events"
     __table_args__ = (
         UniqueConstraint(
@@ -170,6 +196,13 @@ class InboundEvent(Base):
 
 
 class PolicyDecision(Base):
+    """Recorded policy outcome for a proposed outreach channel.
+
+    The planner stores decisions for ALLOW, BLOCK, and DEFER outcomes. Blocked
+    or frequency-capped attempts may have no OutreachTask, but the decision row
+    still explains why automation did or did not proceed.
+    """
+
     __tablename__ = "policy_decisions"
 
     id: Mapped[UUID] = mapped_column(
@@ -201,6 +234,12 @@ class PolicyDecision(Base):
 
 
 class OutreachTask(Base):
+    """Dispatch work item created only after deterministic policy evaluation.
+
+    The task idempotency key is scoped to inbound event and channel so a replay
+    cannot schedule duplicate work for the same logical outreach attempt.
+    """
+
     __tablename__ = "outreach_tasks"
     __table_args__ = (
         Index("ix_outreach_tasks_status_scheduled_at", "status", "scheduled_at"),
@@ -250,6 +289,12 @@ class OutreachTask(Base):
 
 
 class AuditEvent(Base):
+    """Append-only evidence record for request, policy, and planner decisions.
+
+    `correlation_id` ties rows to one request/workflow. `payload` carries the
+    contextual facts needed to explain the event, not normalized mutable state.
+    """
+
     __tablename__ = "audit_events"
     __table_args__ = (
         Index("ix_audit_events_correlation_id", "correlation_id"),

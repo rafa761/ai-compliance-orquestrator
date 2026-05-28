@@ -10,5 +10,12 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
+    """Yield an AsyncSession without owning the request transaction boundary.
+
+    Domain workflows decide when to commit or roll back so multi-step event
+    ingestion can persist snapshots, audit rows, and planner side effects
+    atomically.
+    """
+
     async with async_session() as session:
         yield session

@@ -5,7 +5,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application configuration loaded from environment variables and .env."""
+    """Application configuration for local demo/runtime wiring.
+
+    Defaults are developer-friendly, not production hardening. Environment
+    variables and `.env` override them so tests and local Docker runs can inject
+    database URLs without changing application code.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -26,10 +31,19 @@ class Settings(BaseSettings):
     redis_url: str = "redis://127.0.0.1:6379/0"
 
     def migration_database_url(self, fallback_url: str | None = None) -> str:
+        """Return the URL Alembic should use, preferring an explicit sync URL.
+
+        Runtime code uses the async SQLAlchemy URL. Migrations may need a
+        separate driver-compatible URL, so this method centralizes the fallback
+        order instead of duplicating it in Alembic configuration.
+        """
+
         return self.alembic_database_url or fallback_url or self.database_url
 
 
 def _build_settings() -> Settings:
+    """Small factory so the cached settings callable can be cleared in tests."""
+
     return Settings()
 
 
