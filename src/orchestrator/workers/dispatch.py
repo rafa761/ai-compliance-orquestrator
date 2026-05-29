@@ -133,8 +133,17 @@ async def _record_success(
     details: dict[str, object],
     worker_id: str,
 ) -> None:
-    task.status = OutreachTaskStatus.SENT
-    task.last_error = None
+    result = await session.execute(
+        update(OutreachTask)
+        .where(OutreachTask.id == task.id)
+        .where(OutreachTask.status == OutreachTaskStatus.DISPATCHING)
+        .values(status=OutreachTaskStatus.SENT, last_error=None)
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(result, "rowcount", 0) != 1:
+        await session.rollback()
+        return
+
     await append_audit_event(
         session,
         entity_type="outreach_task",
@@ -160,14 +169,26 @@ async def _record_failure(
     retry_delay: timedelta,
     worker_id: str,
 ) -> None:
-    await session.refresh(task)
     will_retry = task.attempt_count < task.max_attempts
     retry_scheduled_at = now + retry_delay if will_retry else None
-    task.status = (
+    final_status = (
         OutreachTaskStatus.SCHEDULED if will_retry else OutreachTaskStatus.FAILED
     )
-    task.scheduled_at = retry_scheduled_at or task.scheduled_at
-    task.last_error = error
+    result = await session.execute(
+        update(OutreachTask)
+        .where(OutreachTask.id == task.id)
+        .where(OutreachTask.status == OutreachTaskStatus.DISPATCHING)
+        .values(
+            status=final_status,
+            scheduled_at=retry_scheduled_at or task.scheduled_at,
+            last_error=error,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(result, "rowcount", 0) != 1:
+        await session.rollback()
+        return
+
     await append_audit_event(
         session,
         entity_type="outreach_task",
@@ -182,7 +203,7 @@ async def _record_failure(
             "retry_scheduled_at": retry_scheduled_at.isoformat()
             if retry_scheduled_at
             else None,
-            "final_status": task.status.value,
+            "final_status": final_status.value,
         },
     )
     await session.commit()

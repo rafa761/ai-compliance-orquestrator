@@ -1,0 +1,11 @@
+{
+  "status": "failed",
+  "provider_message_id": "mock_email:acct_robert_smith_001:email:001",
+  "details": {
+    "error": "provider rejected recipient",
+    "provider_status": "rejected",
+    "channel": "email",
+    "matched_inbound_event_external_id": "evt_payment_failed_001",
+    "matched_account_external_id": "acct_robert_smith_001"
+  }
+}

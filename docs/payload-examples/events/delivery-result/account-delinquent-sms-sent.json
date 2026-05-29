@@ -1,0 +1,10 @@
+{
+  "status": "sent",
+  "provider_message_id": "mock_sms:acct_jane_doe_001:sms:001",
+  "details": {
+    "provider_status": "accepted",
+    "channel": "sms",
+    "matched_inbound_event_external_id": "evt_account_delinquent_001",
+    "matched_account_external_id": "acct_jane_doe_001"
+  }
+}

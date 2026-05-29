@@ -66,15 +66,20 @@ Implemented:
   - mock SMS, email, and call adapters with deterministic provider message IDs
   - retry and terminal failure handling with dispatch audit events
 
+- Phase 7: operational APIs
+  - task listing and detail endpoints with customer/account context
+  - policy decision context on task detail responses
+  - manual delivery-result simulation for sent/failed outcomes
+  - account-level scheduled outreach cancellation with audit evidence
+
 Planned next:
 
-- Phase 7: operational APIs
 - Phase 8: demo data and walkthrough script
 - Phase 9: portfolio polish and production-extension notes
 
 ## Target system flow
 
-The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, outreach planner, and mock-adapter worker dispatch are implemented.
+The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, outreach planner, mock-adapter worker dispatch, and operational inspection/cancellation APIs are implemented.
 
 ```mermaid
 flowchart TD
@@ -102,6 +107,10 @@ flowchart TD
     Q --> R[Mock call/SMS/email adapter]
     R --> S[Delivery result]
     S --> T[Append dispatch audit trail]
+    P --> U[Operational task APIs]
+    O --> U
+    U --> V[Manual delivery result or scheduled-task cancellation]
+    V --> T
 ```
 
 ## System design
@@ -117,6 +126,8 @@ flowchart LR
         Health[Health endpoint]
         Events[Event ingestion API]
         AuditAPI[Audit API]
+        TasksAPI[Task operations API]
+        AccountsAPI[Account cancellation API]
         Correlation[Correlation middleware]
     end
 
@@ -145,6 +156,8 @@ flowchart LR
     Servicing --> Events
     Demo --> Events
     Demo --> AuditAPI
+    Demo --> TasksAPI
+    Demo --> AccountsAPI
     Events --> Correlation
     Events --> Idempotency
     Events --> SnapshotUpsert
@@ -156,6 +169,12 @@ flowchart LR
     Idempotency --> Inbound
     AuditHelper --> Audit
     AuditAPI --> Audit
+    TasksAPI --> Tasks
+    TasksAPI --> Decisions
+    TasksAPI --> Audit
+    AccountsAPI --> Accounts
+    AccountsAPI --> Tasks
+    AccountsAPI --> Audit
     Planner --> Policy
     Planner --> Decisions
     Planner --> Tasks
@@ -170,6 +189,7 @@ flowchart LR
 - Keep policy decisions deterministic and testable.
 - Treat audit logs as product features, not debug leftovers.
 - Keep application-level idempotency internal and derived from stable source event identity; worker dispatch uses a conditional database claim before provider calls.
+- Keep operational APIs as thin state-inspection and manual-demo controls; retry scheduling stays with the worker.
 - Treat the Phase 6 worker as a demo dispatch boundary: stale `dispatching` recovery and real-provider idempotency tokens are intentionally deferred until provider integrations exist.
 
 ## Design documentation
@@ -180,6 +200,7 @@ flowchart LR
 - [Phase 4 — Outreach planner](docs/phase-4-outreach-planner.md)
 - [Phase 5 — Full event ingestion](docs/phase-5-event-ingestion.md)
 - [Phase 6 — Worker dispatch](docs/phase-6-worker-dispatch.md)
+- [Phase 7 — Operational APIs](docs/phase-7-operational-apis.md)
 
 ## Diagrams
 
