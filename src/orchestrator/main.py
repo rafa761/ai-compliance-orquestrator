@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 
+from orchestrator.api.accounts import router as accounts_router
 from orchestrator.api.audit import router as audit_router
 from orchestrator.api.correlation import correlation_id_middleware
 from orchestrator.api.events import router as events_router
 from orchestrator.api.health import router as health_router
+from orchestrator.api.tasks import router as tasks_router
 from orchestrator.settings import Settings, get_settings
 
 
@@ -26,6 +28,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(events_router)
     app.include_router(audit_router)
+    app.include_router(tasks_router)
+    app.include_router(accounts_router)
     return app
 
 

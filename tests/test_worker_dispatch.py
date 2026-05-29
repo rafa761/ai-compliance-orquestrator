@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -59,6 +59,28 @@ class RecordingAdapter:
         self.calls.append(task.id)
         if self.fail:
             raise RuntimeError("provider unavailable")
+        return DeliveryResult(
+            provider_message_id=f"test-provider:{task.id}",
+            details={"test": True},
+        )
+
+
+@dataclass
+class ManualOverrideAdapter:
+    session: AsyncSession
+    status: OutreachTaskStatus
+    fail_after_override: bool = False
+
+    async def send(self, task: OutreachTask) -> DeliveryResult:
+        await self.session.execute(
+            update(OutreachTask)
+            .where(OutreachTask.id == task.id)
+            .values(status=self.status, last_error="manual override")
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.commit()
+        if self.fail_after_override:
+            raise RuntimeError("provider unavailable after manual override")
         return DeliveryResult(
             provider_message_id=f"test-provider:{task.id}",
             details={"test": True},
@@ -247,6 +269,48 @@ async def test_failing_adapter_marks_failed_at_max_attempts(
     assert failed_event.payload["will_retry"] is False
     assert failed_event.payload["retry_scheduled_at"] is None
     assert failed_event.payload["final_status"] == OutreachTaskStatus.FAILED.value
+
+
+async def test_worker_success_does_not_overwrite_manual_result_recorded_during_dispatch(
+    session: AsyncSession,
+) -> None:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    task = await _seed_task(session, now=now)
+    adapter = ManualOverrideAdapter(session, OutreachTaskStatus.FAILED)
+
+    dispatched = await dispatch_due_tasks(
+        session, now=now, adapters={OutreachChannel.SMS: adapter}
+    )
+
+    assert dispatched == 1
+    await session.refresh(task)
+    assert task.status is OutreachTaskStatus.FAILED
+    assert task.last_error == "manual override"
+    assert [event.event_type for event in await _audit_events(session, task)] == [
+        "dispatch_started"
+    ]
+
+
+async def test_worker_failure_does_not_overwrite_manual_result_recorded_during_dispatch(
+    session: AsyncSession,
+) -> None:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    task = await _seed_task(session, now=now)
+    adapter = ManualOverrideAdapter(
+        session, OutreachTaskStatus.SENT, fail_after_override=True
+    )
+
+    dispatched = await dispatch_due_tasks(
+        session, now=now, adapters={OutreachChannel.SMS: adapter}
+    )
+
+    assert dispatched == 1
+    await session.refresh(task)
+    assert task.status is OutreachTaskStatus.SENT
+    assert task.last_error == "manual override"
+    assert [event.event_type for event in await _audit_events(session, task)] == [
+        "dispatch_started"
+    ]
 
 
 async def test_same_task_is_not_sent_twice(session: AsyncSession) -> None:
