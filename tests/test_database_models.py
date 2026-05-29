@@ -158,6 +158,7 @@ async def test_outreach_task_idempotency_key_is_unique(session: AsyncSession) ->
                 account=account,
                 customer=customer,
                 channel=OutreachChannel.EMAIL,
+                correlation_id=uuid4(),
                 status=OutreachTaskStatus.SCHEDULED,
                 scheduled_at=scheduled_at,
                 idempotency_key="task_001",
@@ -167,6 +168,7 @@ async def test_outreach_task_idempotency_key_is_unique(session: AsyncSession) ->
                 account=account,
                 customer=customer,
                 channel=OutreachChannel.EMAIL,
+                correlation_id=uuid4(),
                 status=OutreachTaskStatus.SCHEDULED,
                 scheduled_at=scheduled_at,
                 idempotency_key="task_001",
@@ -241,6 +243,7 @@ async def test_model_tables_match_phase_1_scope() -> None:
     assert InboundEvent.external_id.property.columns[0].unique is not True
     assert InboundEvent.idempotency_key.property.columns[0].unique is True
     assert OutreachTask.idempotency_key.property.columns[0].unique is True
+    assert OutreachTask.correlation_id.property.columns[0].nullable is False
     assert {
         constraint.name
         for constraint in Base.metadata.tables["inbound_events"].constraints

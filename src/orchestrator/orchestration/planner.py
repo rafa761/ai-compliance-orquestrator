@@ -299,6 +299,7 @@ async def _plan_policy_event(
                 account=account,
                 customer=customer,
                 channel=policy_result.channel,
+                correlation_id=correlation_id,
                 status=OutreachTaskStatus.SCHEDULED,
                 scheduled_at=scheduled_at,
                 idempotency_key=f"outreach_task:{inbound_event.id}:{policy_result.channel.value}",

@@ -258,6 +258,7 @@ class OutreachTask(Base):
     channel: Mapped[OutreachChannel] = mapped_column(
         enum_column(OutreachChannel, "outreach_channel"), nullable=False
     )
+    correlation_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     status: Mapped[OutreachTaskStatus] = mapped_column(
         enum_column(OutreachTaskStatus, "outreach_task_status"), nullable=False
     )

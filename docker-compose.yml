@@ -26,7 +26,7 @@ services:
       context: .
       provenance: false
       sbom: false
-    command: python -c "import time; print('worker placeholder ready', flush=True); time.sleep(31536000)"
+    command: python -m orchestrator.workers.dispatch --poll-interval 5
     env_file:
       - .env
     environment:
