@@ -2,7 +2,7 @@
 
 A FastAPI demo service for regulated-servicing outreach workflows.
 
-The project accepts inbound customer/account events, preserves an auditable event trail, and includes a pure deterministic policy engine integrated with an outreach planner that schedules or cancels outbound call/SMS/email work.
+The project accepts inbound customer/account events, preserves an auditable event trail, and includes a pure deterministic policy engine integrated with an outreach planner and worker that schedules, cancels, and dispatches outbound call/SMS/email work through mock adapters.
 
 The emphasis is not on a flashy chatbot. The emphasis is on the backend engineering concerns that matter when contacting real customers: idempotency, consent, opt-out handling, quiet hours, retry-safe workflows, and evidence that explains what the system did.
 
@@ -16,8 +16,8 @@ This project is being built around engineering concerns common to regulated serv
 - PostgreSQL-backed operational state
 - full customer/account snapshot ingestion before planning
 - planner-integrated deterministic policy checks before outbound work is scheduled
-- planned queue-worker architecture for outbound dispatch
-- planned mock provider adapters to isolate orchestration from vendor APIs
+- DB-backed worker dispatch for due outbound work
+- mock provider adapters to isolate orchestration from vendor APIs
 - small, testable domain components rather than opaque automation
 
 The core design principle is that compliance decisions must be reproducible. AI may eventually help draft messages or summarize audit trails, but the allow/block/defer decision itself remains deterministic and unit tested.
@@ -60,16 +60,21 @@ Implemented:
   - duplicate `source` + `external_id` handling without snapshot mutation or duplicate audit/planner side effects
   - one transaction for event storage, audit, planner execution, and processed status update
 
+- Phase 6: worker dispatch
+  - DB-backed worker poller for due scheduled outreach tasks
+  - conditional scheduled-to-dispatching claim before provider calls
+  - mock SMS, email, and call adapters with deterministic provider message IDs
+  - retry and terminal failure handling with dispatch audit events
+
 Planned next:
 
-- Phase 6: worker dispatch through mock channel adapters
 - Phase 7: operational APIs
 - Phase 8: demo data and walkthrough script
 - Phase 9: portfolio polish and production-extension notes
 
 ## Target system flow
 
-The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, and outreach planner are implemented. Worker dispatch remains planned later-phase work.
+The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, outreach planner, and mock-adapter worker dispatch are implemented.
 
 ```mermaid
 flowchart TD
@@ -92,11 +97,11 @@ flowchart TD
     M -- defer --> O[Schedule at defer_until unless frequency cap applies]
     M -- allow --> P[Create outreach task]
 
-    O --> Q[Future: worker dispatch]
+    O --> Q[Worker dispatch]
     P --> Q
-    Q --> R[Future: mock call/SMS/email adapter]
-    R --> S[Future: delivery result]
-    S --> T[Future: append delivery audit trail]
+    Q --> R[Mock call/SMS/email adapter]
+    R --> S[Delivery result]
+    S --> T[Append dispatch audit trail]
 ```
 
 ## System design
@@ -132,8 +137,7 @@ flowchart LR
         Audit[(audit_events)]
     end
 
-    subgraph Async[Async dispatch - planned]
-        Redis[(Redis broker)]
+    subgraph Async[Async dispatch]
         Worker[Worker process]
         Adapters[Mock channel adapters]
     end
@@ -156,17 +160,17 @@ flowchart LR
     Planner --> Decisions
     Planner --> Tasks
     Planner --> Audit
-    Tasks -. planned dispatch .-> Redis
-    Redis -. planned .-> Worker
-    Worker -. planned .-> Adapters
-    Worker -. planned .-> Audit
+    Tasks --> Worker
+    Worker --> Adapters
+    Worker --> Audit
 ```
 
 ## Development principles
 
 - Keep policy decisions deterministic and testable.
 - Treat audit logs as product features, not debug leftovers.
-- Keep application-level idempotency internal and derived from stable source event identity; add database locking/coordination before claiming production-grade concurrent processing.
+- Keep application-level idempotency internal and derived from stable source event identity; worker dispatch uses a conditional database claim before provider calls.
+- Treat the Phase 6 worker as a demo dispatch boundary: stale `dispatching` recovery and real-provider idempotency tokens are intentionally deferred until provider integrations exist.
 
 ## Design documentation
 
@@ -175,6 +179,7 @@ flowchart LR
 - [Phase 3 — Policy engine](docs/phase-3-policy-engine.md)
 - [Phase 4 — Outreach planner](docs/phase-4-outreach-planner.md)
 - [Phase 5 — Full event ingestion](docs/phase-5-event-ingestion.md)
+- [Phase 6 — Worker dispatch](docs/phase-6-worker-dispatch.md)
 
 ## Diagrams
 
@@ -259,9 +264,9 @@ make docker-up
 Services:
 
 - `api`: FastAPI service on port 8000
-- `worker`: placeholder worker container for later queue dispatch phases
+- `worker`: DB-backed outreach dispatch worker using mock channel adapters
 - `postgres`: PostgreSQL database on port 5432
-- `redis`: Redis broker on port 6379
+- `redis`: reserved infrastructure for later queue/provider integration phases on port 6379
 
 Stop the stack:
 
