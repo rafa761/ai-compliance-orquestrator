@@ -20,7 +20,7 @@ This project is being built around engineering concerns common to regulated serv
 - mock provider adapters to isolate orchestration from vendor APIs
 - small, testable domain components rather than opaque automation
 
-The core design principle is that compliance decisions must be reproducible. AI may eventually help draft messages or summarize audit trails, but the allow/block/defer decision itself remains deterministic and unit tested.
+The core design principle is that compliance decisions must be reproducible, deterministic and unit tested.
 
 ## Current implementation status
 
@@ -72,9 +72,13 @@ Implemented:
   - manual delivery-result simulation for sent/failed outcomes
   - account-level scheduled outreach cancellation with audit evidence
 
+- Phase 8: demo data and walkthrough script
+  - API-driven seeding through `POST /v1/events`
+  - three guided scenarios for scheduling, opt-out blocking, and payment cancellation
+  - `make demo` command and walkthrough documentation
+
 Planned next:
 
-- Phase 8: demo data and walkthrough script
 - Phase 9: portfolio polish and production-extension notes
 
 ## Target system flow
@@ -201,10 +205,15 @@ flowchart LR
 - [Phase 5 — Full event ingestion](docs/phase-5-event-ingestion.md)
 - [Phase 6 — Worker dispatch](docs/phase-6-worker-dispatch.md)
 - [Phase 7 — Operational APIs](docs/phase-7-operational-apis.md)
+- [Phase 8 — Demo data and walkthrough script](docs/phase-8-demo-data-and-script.md)
 
 ## Diagrams
 
 Additional visual asset:
+
+Outreach compliance system design:
+
+![Outreach compliance system design](docs/diagrams/outreach-compliance-orchestrator-2026-05-28.png)
 
 Event-driven call processing
 
@@ -288,6 +297,20 @@ Services:
 - `worker`: DB-backed outreach dispatch worker using mock channel adapters
 - `postgres`: PostgreSQL database on port 5432
 - `redis`: reserved infrastructure for later queue/provider integration phases on port 6379
+
+Run database migration:
+
+```bash
+make migrate
+```
+
+Run the local demo walkthrough after the stack is running and migrations are applied:
+
+```bash
+make demo
+```
+
+The demo command deletes rows from the local demo database, posts all scenario events through the public API, and prints task/audit follow-up summaries. See [docs/demo-script.md](docs/demo-script.md) for the full five-minute walkthrough.
 
 Stop the stack:
 

@@ -1,8 +1,9 @@
-.PHONY: help install run test lint format check migrate downgrade revision docker-up docker-down docker-clean docker-logs docker-ps health
+.PHONY: help install run test lint format check migrate downgrade revision docker-up docker-down docker-clean docker-logs docker-ps health demo
 
 .DEFAULT_GOAL := help
 
 API_URL := http://localhost:8000
+DEMO_DATABASE_URL := postgresql+asyncpg://orchestrator:orchestrator@localhost:5432/outreach_orchestrator
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,3 +51,6 @@ docker-ps: ## Show Docker Compose service status
 
 health: ## Call the local API health endpoint
 	curl $(API_URL)/healthz
+
+demo: ## Reset demo data and run all demo scenarios against the local API
+	uv run python scripts/seed_demo.py --api-url $(API_URL) --database-url $(DEMO_DATABASE_URL)
