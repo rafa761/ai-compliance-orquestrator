@@ -153,6 +153,10 @@ async def test_ingest_event_creates_audit_events_and_filters_by_correlation_id(
     assert non_matching_response.status_code == 200
     audit_events = matching_response.json()
     assert len(audit_events) == 9
+    assert [event["event_type"] for event in audit_events[:2]] == [
+        "event_received",
+        "event_accepted",
+    ]
     assert {"event_received", "event_accepted"}.issubset(
         {event["event_type"] for event in audit_events}
     )

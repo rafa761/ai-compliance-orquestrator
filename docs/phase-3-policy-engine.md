@@ -91,40 +91,47 @@ flowchart TD
 
 ## System design context
 
-Phase 3 is intentionally a domain component, not an API endpoint.
+The policy engine is a domain component, not an API endpoint. It is called by the outreach planner during event ingestion and returns deterministic allow/block/defer results that are persisted as `PolicyDecision` rows alongside task and audit evidence.
 
 ```mermaid
 flowchart LR
     subgraph HTTP[API layer]
         Events[POST /v1/events]
         Audit[GET /v1/audit]
+        Tasks[GET /v1/tasks]
     end
 
     subgraph Domain[Domain and policy layer]
+        Ingestion[Event ingestion]
         Idempotency[Inbound event idempotency]
         AuditHelper[Append audit event]
+        Planner[Outreach planner]
         Policy[Deterministic policy engine]
-        Planner[Outreach planner - later phase]
     end
 
     subgraph Storage[Database]
         Inbound[(inbound_events)]
         AuditTable[(audit_events)]
         Decisions[(policy_decisions)]
-        Tasks[(outreach_tasks)]
+        OutreachTasks[(outreach_tasks)]
     end
 
-    Events --> Idempotency
-    Events --> AuditHelper
+    Events --> Ingestion
+    Ingestion --> Idempotency
+    Ingestion --> Planner
+    Ingestion --> AuditHelper
     Idempotency --> Inbound
+    Planner --> Policy
+    Planner --> Decisions
+    Planner --> OutreachTasks
+    Planner --> AuditHelper
     AuditHelper --> AuditTable
-    Planner -. later phase .-> Policy
-    Policy -. later phase persistence .-> Decisions
-    Planner -. later phase .-> Tasks
     Audit --> AuditTable
+    Tasks --> OutreachTasks
+    Tasks --> Decisions
 ```
 
-In the current phase, the planner integration is not built yet. Phase 4 will call `evaluate_policy` for each proposed outreach task and persist the resulting `PolicyDecision` rows.
+The planner calls `evaluate_policy` for each proposed outreach channel and persists the resulting `PolicyDecision` rows. Blocked attempts preserve decision evidence without creating dispatchable tasks; allowed and deferred decisions create scheduled outreach tasks.
 
 ## Why no LLM policy decisioning
 
@@ -240,17 +247,15 @@ The unit test suite covers:
 - block precedence skips defer validation
 - invalid timezones raise a clear `ValueError` when defer rules need timezone evaluation
 
-## Current limitations
+## Phase boundary
 
-This phase does not yet:
+At the Phase 3 boundary, the policy engine did not yet own persistence, task creation, cancellation, or API presentation. Those responsibilities were intentionally added in later phases:
 
-- persist policy decisions
-- calculate rolling 24-hour contact counts from the database
-- generate outreach tasks
-- cancel pending outreach for payment or opt-out events
-- expose policy decisions through an API
+- Phase 4 persists policy decisions, generates outreach tasks, and cancels scheduled outreach for payment or opt-out events.
+- Phase 5 integrates the planner into full event ingestion.
+- Phase 7 exposes policy decision context through operational task APIs.
 
-Those belong to later phases. Keeping this phase small makes the core policy behavior easier to prove.
+Keeping the initial policy phase small made the core decision behavior easier to prove before wiring it into orchestration.
 
 ## Narrative
 

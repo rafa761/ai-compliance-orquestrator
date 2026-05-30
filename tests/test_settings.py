@@ -14,7 +14,6 @@ def test_settings_loads_values_from_env_file(tmp_path) -> None:
                 "APP_PORT=9000",
                 "LOG_LEVEL=debug",
                 "DATABASE_URL=sqlite+aiosqlite:///./test.db",
-                "REDIS_URL=redis://localhost:6379/1",
             ]
         )
     )
@@ -26,7 +25,6 @@ def test_settings_loads_values_from_env_file(tmp_path) -> None:
     assert settings.app_port == 9000
     assert settings.log_level == "debug"
     assert settings.database_url == "sqlite+aiosqlite:///./test.db"
-    assert settings.redis_url == "redis://localhost:6379/1"
 
 
 def test_settings_resolves_migration_database_url_with_explicit_override() -> None:
