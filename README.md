@@ -77,116 +77,25 @@ Implemented:
   - three guided scenarios for scheduling, opt-out blocking, and payment cancellation
   - `make demo` command and walkthrough documentation
 
-Planned next:
+Portfolio polish:
 
-- Phase 9: portfolio polish and production-extension notes
+- Current-runtime diagrams are rendered as Excalidraw assets.
+- Production-oriented design artifacts are kept separately and labelled as extensions.
+- Production-extension notes explain why the local demo uses PostgreSQL-backed polling instead of Redis or a broker.
 
 ## Target system flow
 
 The webhook, customer/account snapshot upsert, idempotent event storage, audit logging, policy engine, outreach planner, mock-adapter worker dispatch, and operational inspection/cancellation APIs are implemented.
 
-```mermaid
-flowchart TD
-    A[Inbound servicing event] --> B[FastAPI webhook]
-    B --> C[Correlation ID middleware]
-    C --> D[Internal idempotency check]
-    D --> E{Duplicate source event?}
+![Current demo flow](docs/diagrams/current-target-system-flow-2026-05-30.png)
 
-    E -- yes --> F[Return existing event ID and reconstructed counts]
-    E -- no --> G[Upsert customer/account snapshot]
-    G --> H[Store inbound event]
-    H --> I[Append event_received audit event]
-    I --> J[Append event_accepted audit event]
-
-    J --> K[Outreach planner]
-    K --> L[Policy engine]
-    L --> M{Decision per channel}
-
-    M -- block --> N[Persist policy decision and audit block]
-    M -- defer --> O[Schedule at defer_until unless frequency cap applies]
-    M -- allow --> P[Create outreach task]
-
-    O --> Q[Worker dispatch]
-    P --> Q
-    Q --> R[Mock call/SMS/email adapter]
-    R --> S[Delivery result]
-    S --> T[Append dispatch audit trail]
-    P --> U[Operational task APIs]
-    O --> U
-    U --> V[Manual delivery result or scheduled-task cancellation]
-    V --> T
-```
+Editable source: [current-target-system-flow-2026-05-30.excalidraw](docs/diagrams/current-target-system-flow-2026-05-30.excalidraw)
 
 ## System design
 
-```mermaid
-flowchart LR
-    subgraph Clients[External callers]
-        Servicing[Servicing system]
-        Demo[Demo scripts / curl]
-    end
+![Current demo architecture](docs/diagrams/current-system-design-2026-05-30.png)
 
-    subgraph API[FastAPI service]
-        Health[Health endpoint]
-        Events[Event ingestion API]
-        AuditAPI[Audit API]
-        TasksAPI[Task operations API]
-        AccountsAPI[Account cancellation API]
-        Correlation[Correlation middleware]
-    end
-
-    subgraph Domain[Domain layer]
-        Idempotency[Idempotency helper]
-        SnapshotUpsert[Snapshot upsert]
-        AuditHelper[Audit helper]
-        Policy[Deterministic policy engine]
-        Planner[Outreach planner]
-    end
-
-    subgraph Data[PostgreSQL]
-        Customers[(customers)]
-        Accounts[(accounts)]
-        Inbound[(inbound_events)]
-        Decisions[(policy_decisions)]
-        Tasks[(outreach_tasks)]
-        Audit[(audit_events)]
-    end
-
-    subgraph Async[Async dispatch]
-        Worker[Worker process]
-        Adapters[Mock channel adapters]
-    end
-
-    Servicing --> Events
-    Demo --> Events
-    Demo --> AuditAPI
-    Demo --> TasksAPI
-    Demo --> AccountsAPI
-    Events --> Correlation
-    Events --> Idempotency
-    Events --> SnapshotUpsert
-    Events --> AuditHelper
-    Events --> Planner
-    Events --> Inbound
-    SnapshotUpsert --> Customers
-    SnapshotUpsert --> Accounts
-    Idempotency --> Inbound
-    AuditHelper --> Audit
-    AuditAPI --> Audit
-    TasksAPI --> Tasks
-    TasksAPI --> Decisions
-    TasksAPI --> Audit
-    AccountsAPI --> Accounts
-    AccountsAPI --> Tasks
-    AccountsAPI --> Audit
-    Planner --> Policy
-    Planner --> Decisions
-    Planner --> Tasks
-    Planner --> Audit
-    Tasks --> Worker
-    Worker --> Adapters
-    Worker --> Audit
-```
+Editable source: [current-system-design-2026-05-30.excalidraw](docs/diagrams/current-system-design-2026-05-30.excalidraw)
 
 ## Development principles
 
@@ -207,17 +116,21 @@ flowchart LR
 - [Phase 7 — Operational APIs](docs/phase-7-operational-apis.md)
 - [Phase 8 — Demo data and walkthrough script](docs/phase-8-demo-data-and-script.md)
 
-## Diagrams
+## Additional design artifacts
 
-Additional visual asset:
-
-Outreach compliance system design:
+Broader production-oriented design exploration:
 
 ![Outreach compliance system design](docs/diagrams/outreach-compliance-orchestrator-2026-05-28.png)
 
-Event-driven call processing
+Editable source: [outreach-compliance-orchestrator-2026-05-28.excalidraw](docs/diagrams/outreach-compliance-orchestrator-2026-05-28.excalidraw)
+
+Production dispatch evolution:
 
 ![Event driven call processing](docs/diagrams/event-driven-call-processing-2026-05-28.png)
+
+Editable source: [event-driven-call-processing-2026-05-28.excalidraw](docs/diagrams/event-driven-call-processing-2026-05-28.excalidraw)
+
+This dispatch diagram shows a production-oriented evolution of the worker path. The submitted demo intentionally uses PostgreSQL-backed polling instead of Redis or a broker so reviewers can run and understand the core compliance workflow quickly: idempotent event ingestion, deterministic policy decisions, task state transitions, and audit evidence.
 
 ## Requirements
 
@@ -296,7 +209,6 @@ Services:
 - `api`: FastAPI service on port 8000
 - `worker`: DB-backed outreach dispatch worker using mock channel adapters
 - `postgres`: PostgreSQL database on port 5432
-- `redis`: reserved infrastructure for later queue/provider integration phases on port 6379
 
 Run database migration:
 
@@ -311,6 +223,12 @@ make demo
 ```
 
 The demo command deletes rows from the local demo database, posts all scenario events through the public API, and prints task/audit follow-up summaries. See [docs/demo-script.md](docs/demo-script.md) for the full five-minute walkthrough.
+
+## Production extension notes
+
+The demo intentionally uses a PostgreSQL-backed polling worker rather than a separate broker. That keeps the local architecture small and makes the important servicing guarantees visible in one database: idempotent event ingestion, deterministic policy decisions, task state transitions, and audit evidence.
+
+In a production setting, the natural next step would be a broker-backed dispatch path such as SQS, Redis, Dramatiq, or Celery once provider throughput, retry isolation, and operational scaling require it. The compliance decision itself should remain deterministic and auditable; optional AI belongs in non-authoritative message drafting, summaries, or reviewer assistance after policy has allowed the outreach.
 
 Stop the stack:
 

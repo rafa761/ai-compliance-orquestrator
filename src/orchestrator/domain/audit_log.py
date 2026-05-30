@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -32,6 +33,7 @@ async def append_audit_event(
         actor_id=actor_id,
         correlation_id=correlation_id,
         payload=payload or {},
+        created_at=datetime.now(UTC),
     )
     session.add(audit_event)
     await session.flush()

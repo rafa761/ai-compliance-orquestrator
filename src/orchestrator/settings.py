@@ -28,7 +28,6 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://orchestrator:orchestrator@localhost:5432/outreach_orchestrator"
     )
     alembic_database_url: str | None = None
-    redis_url: str = "redis://127.0.0.1:6379/0"
 
     def migration_database_url(self, fallback_url: str | None = None) -> str:
         """Return the URL Alembic should use, preferring an explicit sync URL.

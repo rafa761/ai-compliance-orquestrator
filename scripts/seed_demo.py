@@ -285,7 +285,8 @@ class DemoApiClient:
             headers={"Content-Type": "application/json"},
         )
         try:
-            with urlopen(request, timeout=10) as response:  # noqa: S310 - demo targets local API.
+            # Demo-only local HTTP client; the base URL defaults to localhost.
+            with urlopen(request, timeout=10) as response:  # noqa: S310 # nosec B310
                 response_body = response.read().decode("utf-8")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8")

@@ -165,18 +165,15 @@ This phase appends audit evidence for:
 
 Audit payloads include the inbound event context and channel or reason details where relevant.
 
-## Current limitations
+## Phase boundary
 
-This phase does not yet:
+At the Phase 4 boundary, the planner was still exercised as a domain component rather than through the full public event ingestion path. Later phases intentionally added the remaining runtime wiring:
 
-- call the planner from `POST /v1/events`
-- ingest nested customer/account snapshots from webhook payloads
-- dispatch tasks to workers or provider adapters
-- expose planner results through a public API endpoint
-- model provider delivery callbacks
-- implement production-grade locking for concurrent planner calls
+- Phase 5 calls the planner from `POST /v1/events` and ingests nested customer/account snapshots from webhook payloads.
+- Phase 6 dispatches scheduled tasks through the DB-backed worker and mock provider adapters.
+- Phase 7 exposes task, policy decision, delivery-result, and cancellation operations through public APIs.
 
-Those are intentionally deferred. The current implementation is small, testable, and clear enough to discuss in an interview.
+That sequencing kept the planner small, testable, and clear enough to discuss before adding runtime orchestration.
 
 ## Narrative
 
