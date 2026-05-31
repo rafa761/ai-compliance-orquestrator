@@ -14,6 +14,16 @@ Regulated servicing teams need outreach systems that can answer three practical 
 
 This demo treats those concerns as product behavior, not after-the-fact log messages.
 
+## 5 Minutes demo
+
+<a href="https://www.youtube.com/watch?v=GvKTY6Y4XC8">
+  <img
+    src="https://img.youtube.com/vi/GvKTY6Y4XC8/hqdefault.jpg"
+    alt="Compliant Outreach Orchestrator demo video"
+    width="800"
+  />
+</a>
+
 ## Current demo flow
 
 ![Current demo flow](docs/diagrams/current-target-system-flow-2026-05-30.png)
@@ -32,7 +42,7 @@ Editable source: [current-target-system-flow-2026-05-30.excalidraw](docs/diagram
 - Operational APIs to inspect tasks, simulate delivery results, cancel outreach, and query audit evidence.
 - A repeatable five-minute local demo covering scheduling, opt-out blocking, and payment cancellation.
 
-## Five-minute local demo
+## Local demo
 
 Prerequisites:
 
