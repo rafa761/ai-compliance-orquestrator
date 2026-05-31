@@ -1,5 +1,5 @@
 [project]
-name = "ai-compliance-orchestrator"
+name = "compliance-outreach-orchestrator"
 version = "0.1.0"
 description = "Demo compliant outreach orchestration service inspired by regulated servicing workflows."
 readme = "README.md"
