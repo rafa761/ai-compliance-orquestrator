@@ -12,7 +12,7 @@ install: ## Install project dependencies with uv
 	uv sync
 
 run: ## Run the FastAPI app locally without Docker
-	uv run python -m orchestrator.main
+	uv run src/orchestrator/main.py
 
 test: ## Run the test suite
 	uv run pytest -q
