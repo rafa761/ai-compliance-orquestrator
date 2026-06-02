@@ -33,14 +33,11 @@ Editable source: [current-target-system-flow-2026-05-30.excalidraw](docs/diagram
 ## What this demonstrates
 
 - Idempotent event ingestion from external servicing systems.
-- Customer/account snapshot materialization before planning.
 - Deterministic policy checks for consent, opt-out, quiet hours, account status, and contact frequency.
 - Persisted allow/block/defer decisions with explicit reasons.
 - Scheduled outreach tasks for call, SMS, and email channels.
 - Event-driven cancellation for opt-out, hardship, payment, and account-pause scenarios.
 - PostgreSQL-backed worker dispatch through mock provider adapters.
-- Operational APIs to inspect tasks, simulate delivery results, cancel outreach, and query audit evidence.
-- A repeatable five-minute local demo covering scheduling, opt-out blocking, and payment cancellation.
 
 ## Local demo
 
@@ -76,7 +73,7 @@ The demo command resets the local demo database, posts events through `POST /v1/
 2. Opt-out creates durable state and blocks later outreach.
 3. Payment received cancels scheduled outreach.
 
-For the full walkthrough and optional inspection commands, see [docs/demo-script.md](docs/demo-script.md).
+For the full walkthrough commands, see [docs/demo-script.md](docs/demo-script.md).
 
 ## API surface
 
